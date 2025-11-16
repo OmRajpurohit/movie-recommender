@@ -7,7 +7,8 @@ from sklearn.metrics.pairwise import linear_kernel
 from rapidfuzz import process, fuzz
 
 print("Loading data...")
-df = pd.read_csv("data.csv")
+url = "https://drive.google.com/file/d/1HyyDvXcGeoavPKCQz691vArabw1l-Wd3/view?usp=sharing"
+df = pd.read_csv("url")
 df['genres'] =df['genres'].fillna('').astype(str)
 df['tagline'] =df['genres'].fillna('').astype(str)
 df['keywords'] =df['keywords'].fillna('').astype(str)
@@ -120,3 +121,4 @@ def hybrid_recommend(title, top_n=10):
 movies, msg = hybrid_recommend("hum sath sath hai", top_n=5)
 print(movies)
 print("Message:", msg)
+
