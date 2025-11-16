@@ -8,7 +8,10 @@ from rapidfuzz import process, fuzz
 
 print("Loading data...")
 url = "https://drive.google.com/file/d/1HyyDvXcGeoavPKCQz691vArabw1l-Wd3/view?usp=sharing"
-df = pd.read_csv(url)
+df = pd.read_csv(url,
+                engine="python",
+                on_bad_lines="skip",
+                quoting=csv.QUOTE_MINIMAL)
 df['genres'] =df['genres'].fillna('').astype(str)
 df['tagline'] =df['genres'].fillna('').astype(str)
 df['keywords'] =df['keywords'].fillna('').astype(str)
@@ -121,6 +124,7 @@ def hybrid_recommend(title, top_n=10):
 movies, msg = hybrid_recommend("hum sath sath hai", top_n=5)
 print(movies)
 print("Message:", msg)
+
 
 
 
