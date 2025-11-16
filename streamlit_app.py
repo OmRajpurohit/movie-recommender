@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import nbimporter
 from recommender import hybrid_recommend, get_popular_movies
 
 # Page config
@@ -47,3 +46,4 @@ for idx, (i, row) in enumerate(movies.iterrows()):
         st.markdown(f"**{row['title']}**")
         st.write(f"⭐ {row['imdb_score']}")
         st.markdown("---")
+
