@@ -8,7 +8,7 @@ from sklearn.metrics.pairwise import linear_kernel
 from rapidfuzz import process, fuzz
 
 print("Loading data...")
-url = "url = "https://drive.google.com/uc?id=1HyyDvXcGeoavPKCQz691vArabw11-Wd3"
+url = "https://drive.google.com/uc?id=1HyyDvXcGeoavPKCQz691vArabw11-Wd3"
 
 df = pd.read_csv(url,
                 engine="python",
@@ -126,6 +126,7 @@ def hybrid_recommend(title, top_n=10):
 movies, msg = hybrid_recommend("hum sath sath hai", top_n=5)
 print(movies)
 print("Message:", msg)
+
 
 
 
