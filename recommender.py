@@ -52,7 +52,7 @@ print("Original id for item_idx 0->",item_le.inverse_transform([0])[0])
 print("Creating TF-IDF matrix...")
 
 tfidf = TfidfVectorizer(
-    max_features=40000,
+    max_features=10000,
     stop_words='english',
     ngram_range=(1, 2)
 )
@@ -121,4 +121,5 @@ def hybrid_recommend(title, top_n=10):
 movies, msg = hybrid_recommend("hum sath sath hai", top_n=5)
 print(movies)
 print("Message:", msg)
+
 
