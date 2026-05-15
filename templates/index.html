@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cinema Atlas</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <div class="page-shell">
+        <header class="hero" {% if hero_movie and hero_movie.backdrop_url %}style="background-image: linear-gradient(180deg, rgba(7, 10, 18, 0.18), rgba(7, 10, 18, 0.96)), url('{{ hero_movie.backdrop_url }}');"{% endif %}>
+            <nav class="topbar">
+                <div>
+                    <h1>Cinema Atlas</h1>
+                </div>
+                <div class="topbar-copy">
+                    <span>Popular picks, typo-tolerant search, and clickable poster trails.</span>
+                </div>
+            </nav>
+
+            <div class="hero-content">
+                <section class="hero-copy">
+                    <p class="eyebrow">Tonight's front row</p>
+                    <h2>{{ hero_movie.title if hero_movie else "Explore your next favorite movie" }}</h2>
+                    <p class="hero-meta">
+                        <span>IMDb {{ hero_movie.imdb_rating if hero_movie else "n/a" }}</span>
+                        <span>{{ hero_movie.genres if hero_movie else "Genre-rich catalog" }}</span>
+                        <span>{{ hero_movie.language if hero_movie else "Multi-language" }}</span>
+                    </p>
+                    <p class="hero-overview">{{ hero_movie.overview if hero_movie else "Search by title or click any poster to keep the recommendation chain going." }}</p>
+                </section>
+
+                <section class="hero-panel">
+                    <form class="search-card" method="GET" action="{{ url_for('home') }}">
+                        <label for="title">Find movies by title</label>
+                        <div class="search-row">
+                            <input
+                                id="title"
+                                name="title"
+                                type="text"
+                                value="{{ search_query }}"
+                                placeholder="Try Inception, Interstelar, Sholay..."
+                                autocomplete="off"
+                            >
+                            <button type="submit">Search</button>
+                        </div>
+
+                        <div class="filter-row">
+                            <div class="filter-group">
+                                <span>Genre</span>
+                                <select name="genre" onchange="this.form.submit()">
+                                    {% for genre in genre_options %}
+                                        <option value="{{ genre }}" {% if selected_genre == genre %}selected{% endif %}>
+                                            {{ "All genres" if genre == "all" else genre }}
+                                        </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="filter-group">
+                                <span>Language</span>
+                                <select name="language" onchange="this.form.submit()">
+                                    {% for code, label in language_options %}
+                                        <option value="{{ code }}" {% if selected_language == code %}selected{% endif %}>
+                                            {{ label }}
+                                        </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                    </form>
+
+                    <div class="stat-card">
+                        <p class="eyebrow">How it works</p>
+                        <p>Recommendations blend TF-IDF content similarity, genre overlap, language affinity, and an IMDb-style weighted popularity signal.</p>
+                    </div>
+                </section>
+            </div>
+        </header>
+
+        <main class="content">
+            {% if user_message %}
+                <section class="section">
+                    <p class="message">{{ user_message }}</p>
+                </section>
+            {% endif %}
+
+            {% if recommendation_result %}
+                <section class="section">
+                    <div class="section-heading">
+                        <div>
+                            <p class="eyebrow">Search result</p>
+                            <h3>Because you searched for {{ recommendation_result.resolved_title }}</h3>
+                        </div>
+                        <div class="seed-pill">
+                            <span>{{ recommendation_result.seed_movie.language }}</span>
+                            <strong>IMDb {{ recommendation_result.seed_movie.imdb_rating }}</strong>
+                        </div>
+                    </div>
+
+                    {% if recommendation_result.message %}
+                        <p class="message">{{ recommendation_result.message }}</p>
+                    {% endif %}
+
+                    <div class="seed-card">
+                        <div class="seed-poster">
+                            {% if recommendation_result.seed_movie.poster_url %}
+                                <img src="{{ recommendation_result.seed_movie.poster_url }}" alt="{{ recommendation_result.seed_movie.title }} poster">
+                            {% else %}
+                                <div class="poster-fallback">{{ recommendation_result.seed_movie.title }}</div>
+                            {% endif %}
+                        </div>
+                        <div class="seed-copy">
+                            <h4>{{ recommendation_result.seed_movie.title }}</h4>
+                            <p class="movie-meta">{{ recommendation_result.seed_movie.year }} | {{ recommendation_result.seed_movie.genres }} | {{ recommendation_result.seed_movie.runtime }}</p>
+                            <p>{{ recommendation_result.seed_movie.overview }}</p>
+                        </div>
+                    </div>
+
+                    <div class="movie-grid">
+                        {% for movie in recommendation_result.movies %}
+                            <a
+                                class="movie-card"
+                                href="{{ url_for('home', movie_id=movie.id, genre=selected_genre, language=selected_language) }}"
+                            >
+                                <div class="poster-frame">
+                                    {% if movie.poster_url %}
+                                        <img src="{{ movie.poster_url }}" alt="{{ movie.title }} poster">
+                                    {% else %}
+                                        <div class="poster-fallback">{{ movie.title }}</div>
+                                    {% endif %}
+                                    <span class="rating-chip">IMDb {{ movie.imdb_rating }}</span>
+                                </div>
+                                <div class="movie-copy">
+                                    <h4>{{ movie.title }}</h4>
+                                    <p>{{ movie.year }} | {{ movie.genres }}</p>
+                                    <span>{{ movie.language }}</span>
+                                </div>
+                            </a>
+                        {% endfor %}
+                    </div>
+                </section>
+            {% endif %}
+
+            <section class="section">
+                <div class="section-heading">
+                    <div>
+                        <p class="eyebrow">Browse the catalog</p>
+                        <h3>Popular movies with posters and ratings</h3>
+                    </div>
+                    <p class="section-copy">Click any poster to pivot the recommendation feed around that title.</p>
+                </div>
+
+                <div class="movie-grid">
+                    {% for movie in featured_movies %}
+                        <a
+                            class="movie-card"
+                            href="{{ url_for('home', movie_id=movie.id, genre=selected_genre, language=selected_language) }}"
+                        >
+                            <div class="poster-frame">
+                                {% if movie.poster_url %}
+                                    <img src="{{ movie.poster_url }}" alt="{{ movie.title }} poster">
+                                {% else %}
+                                    <div class="poster-fallback">{{ movie.title }}</div>
+                                {% endif %}
+                                <span class="rating-chip">IMDb {{ movie.imdb_rating }}</span>
+                            </div>
+                            <div class="movie-copy">
+                                <h4>{{ movie.title }}</h4>
+                                <p>{{ movie.year }} | {{ movie.genres }}</p>
+                                <span>{{ movie.language }}</span>
+                            </div>
+                        </a>
+                    {% endfor %}
+                </div>
+            </section>
+        </main>
+    </div>
+</body>
+</html>
