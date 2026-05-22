@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cinema Atlas</title>
+    <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+    <div class="page-shell">
+        <header class="hero" id="hero">
+            <nav class="topbar">
+                <div>
+                    <p class="eyebrow">Vercel Frontend + Render API</p>
+                    <h1>Cinema Atlas</h1>
+                </div>
+                <div class="topbar-copy">
+                    <span>Popular picks, typo-tolerant search, and clickable poster trails.</span>
+                </div>
+            </nav>
+
+            <div class="hero-content">
+                <section class="hero-copy">
+                    <p class="eyebrow">Tonight's front row</p>
+                    <h2 id="hero-title">Loading featured movie...</h2>
+                    <p class="hero-meta" id="hero-meta"></p>
+                    <p class="hero-overview" id="hero-overview">Warming up the recommendation engine.</p>
+                </section>
+
+                <section class="hero-panel">
+                    <form class="search-card" id="search-form">
+                        <label for="title">Find movies by title</label>
+                        <div class="search-row">
+                            <div class="search-shell">
+                                <input id="title" name="title" type="text" placeholder="Try Inception, Interstelar, Sholay..." autocomplete="off">
+                                <div class="suggestions" id="suggestions" hidden></div>
+                            </div>
+                            <button type="submit">Search</button>
+                        </div>
+
+                        <div class="filter-row">
+                            <div class="filter-group">
+                                <span>Genre</span>
+                                <select id="genre" name="genre"></select>
+                            </div>
+                            <div class="filter-group">
+                                <span>Language</span>
+                                <select id="language" name="language"></select>
+                            </div>
+                        </div>
+                    </form>
+
+                    <div class="stat-card">
+                        <p class="eyebrow">How it works</p>
+                        <p>Recommendations blend TF-IDF content similarity, genre overlap, language affinity, and an IMDb-style weighted popularity signal from the Render backend.</p>
+                    </div>
+                </section>
+            </div>
+        </header>
+
+        <main class="content">
+            <section class="section hidden" id="message-section">
+                <p class="message" id="message-text"></p>
+            </section>
+
+            <section class="section hidden" id="recommendation-section">
+                <div class="section-heading">
+                    <div>
+                        <p class="eyebrow">Search result</p>
+                        <h3 id="recommendation-heading"></h3>
+                    </div>
+                </div>
+
+                <div class="seed-card hidden" id="seed-card">
+                    <div class="seed-poster" id="seed-poster"></div>
+                    <div class="seed-copy">
+                        <h4 id="seed-title"></h4>
+                        <p class="movie-meta" id="seed-meta"></p>
+                        <p id="seed-overview"></p>
+                    </div>
+                </div>
+
+                <div class="movie-grid" id="recommendation-grid"></div>
+            </section>
+
+            <section class="section">
+                <div class="section-heading">
+                    <div>
+                        <p class="eyebrow">Browse the catalog</p>
+                        <h3>Popular movies with posters and ratings</h3>
+                    </div>
+                    <p class="section-copy">Click any poster to pivot the recommendation feed around that title.</p>
+                </div>
+
+                <div class="movie-grid" id="popular-grid"></div>
+            </section>
+        </main>
+    </div>
+
+    <script src="./config.js"></script>
+    <script src="./app.js"></script>
+</body>
+</html>

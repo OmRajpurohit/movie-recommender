@@ -1,0 +1,7 @@
+{
+  "name": "cinema-atlas-frontend",
+  "private": true,
+  "scripts": {
+    "build": "node build.mjs"
+  }
+}

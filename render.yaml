@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: cinema-atlas-api
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt && python download_dataset.py && python build_index.py
+    startCommand: gunicorn app:app
+    autoDeployTrigger: commit
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.10
+      - key: MOVIES_DATA_PATH
+        value: data/movies1M.csv
+      - key: WORKING_SAMPLE_SIZE
+        value: "10000"
+      - key: GOOGLE_DRIVE_FILE_ID
+        sync: false
+      - key: GOOGLE_DRIVE_URL
+        sync: false
+      - key: FRONTEND_ORIGIN
+        sync: false

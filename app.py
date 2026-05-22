@@ -1,13 +1,21 @@
 from __future__ import annotations
 
 from functools import lru_cache
+import os
 
-from flask import Flask, render_template, request
+from flask import Flask, jsonify, request
+from flask_cors import CORS
 
 from recommender import MovieRecommender
 
 
 app = Flask(__name__)
+
+frontend_origin = os.getenv("FRONTEND_ORIGIN", "*").strip() or "*"
+CORS(
+    app,
+    resources={r"/api/*": {"origins": frontend_origin}},
+)
 
 
 @lru_cache(maxsize=1)
@@ -15,59 +23,102 @@ def get_recommender() -> MovieRecommender:
     return MovieRecommender()
 
 
+def parse_common_filters() -> tuple[str, str, int]:
+    genre = request.args.get("genre", "all").strip() or "all"
+    language = request.args.get("language", "all").strip() or "all"
+    limit = request.args.get("limit", default=18, type=int)
+    return genre, language, max(1, min(limit, 50))
+
+
+@app.get("/")
+def index():
+    return jsonify(
+        {
+            "service": "Cinema Atlas API",
+            "status": "ok",
+            "message": "Frontend is intended to be hosted on Vercel. Use the /api endpoints from the static frontend.",
+            "endpoints": [
+                "/health",
+                "/api/filters",
+                "/api/featured",
+                "/api/popular",
+                "/api/suggestions?q=inter",
+                "/api/recommendations?title=inception",
+                "/api/recommendations?movie_id=27205",
+            ],
+        }
+    )
+
+
 @app.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
-
-
-@app.route("/", methods=["GET", "POST"])
-def home():
+def health():
     engine = get_recommender()
+    return {
+        "status": "ok",
+        "movies_loaded": len(engine.movies),
+        "data_path": str(engine.csv_path),
+        "cache_path": str(engine.cache_path),
+    }
 
-    search_query = (
-        request.values.get("title", "") if request.method == "GET" else request.form.get("title", "")
-    ).strip()
-    selected_movie_id = request.values.get("movie_id", type=int)
-    selected_genre = request.values.get("genre", "all").strip() or "all"
-    selected_language = request.values.get("language", "all").strip() or "all"
-    user_message = None
 
-    featured_movies = engine.get_popular_movies(
-        limit=18,
-        genre=selected_genre,
-        language=selected_language,
+@app.get("/api/filters")
+def filters():
+    engine = get_recommender()
+    return jsonify(
+        {
+            "genres": engine.genre_options,
+            "languages": [{"code": code, "label": label} for code, label in engine.language_options],
+        }
     )
-    hero_movie = featured_movies[0] if featured_movies else engine.get_featured_movie()
 
-    recommendation_result = None
-    if selected_movie_id:
-        recommendation_result = engine.recommend_by_id(
-            selected_movie_id,
-            top_n=18,
-            genre=selected_genre,
-            language=selected_language,
-        )
-    elif search_query:
-        recommendation_result, user_message = engine.recommend_by_title(
-            search_query,
-            top_n=18,
-            genre=selected_genre,
-            language=selected_language,
+
+@app.get("/api/featured")
+def featured():
+    engine = get_recommender()
+    return jsonify({"movie": engine.get_featured_movie()})
+
+
+@app.get("/api/popular")
+def popular():
+    engine = get_recommender()
+    genre, language, limit = parse_common_filters()
+    movies = engine.get_popular_movies(limit=limit, genre=genre, language=language)
+    return jsonify({"movies": movies})
+
+
+@app.get("/api/suggestions")
+def suggestions():
+    engine = get_recommender()
+    query = request.args.get("q", "").strip()
+    return jsonify({"suggestions": engine.get_search_suggestions(query)})
+
+
+@app.get("/api/recommendations")
+def recommendations():
+    engine = get_recommender()
+    genre, language, limit = parse_common_filters()
+    movie_id = request.args.get("movie_id", type=int)
+    title = request.args.get("title", "").strip()
+
+    if movie_id:
+        result = engine.recommend_by_id(movie_id, top_n=limit, genre=genre, language=language)
+        if result is None:
+            return jsonify({"error": "Movie not found."}), 404
+        return jsonify({"result": engine.serialize_recommendation_result(result)})
+
+    if title:
+        result, user_message = engine.recommend_by_title(title, top_n=limit, genre=genre, language=language)
+        if result is None:
+            return jsonify({"error": user_message or "No close title match found."}), 404
+        return jsonify(
+            {
+                "result": engine.serialize_recommendation_result(result),
+                "user_message": user_message,
+            }
         )
 
-    return render_template(
-        "index.html",
-        hero_movie=hero_movie,
-        featured_movies=featured_movies,
-        recommendation_result=recommendation_result,
-        user_message=user_message,
-        search_query=search_query,
-        selected_genre=selected_genre,
-        selected_language=selected_language,
-        genre_options=engine.genre_options,
-        language_options=engine.language_options,
-    )
+    return jsonify({"error": "Provide either title or movie_id."}), 400
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)

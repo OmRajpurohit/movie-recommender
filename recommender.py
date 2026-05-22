@@ -1,10 +1,14 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
+import hashlib
+import json
+import os
 import re
 from typing import Any
 
+import joblib
 import numpy as np
 import pandas as pd
 from rapidfuzz import fuzz, process
@@ -14,8 +18,11 @@ from sklearn.metrics.pairwise import linear_kernel
 
 IMAGE_BASE_URL = "https://image.tmdb.org/t/p/w500"
 BACKDROP_BASE_URL = "https://image.tmdb.org/t/p/w780"
-RAW_DATA_PATH = Path(__file__).with_name("movies1M.csv")
-WORKING_SAMPLE_SIZE = 10_000
+PROJECT_ROOT = Path(__file__).resolve().parent
+ARTIFACTS_DIR = PROJECT_ROOT / "artifacts"
+DEFAULT_DATA_PATH = PROJECT_ROOT / "movies1M.csv"
+CACHE_PATH = ARTIFACTS_DIR / "recommender_cache.joblib"
+META_PATH = ARTIFACTS_DIR / "recommender_cache_meta.json"
 
 LANGUAGE_LABELS = {
     "ar": "Arabic",
@@ -49,15 +56,76 @@ class RecommendationResult:
 
 
 class MovieRecommender:
-    def __init__(self, csv_path: Path | str = RAW_DATA_PATH, sample_size: int = WORKING_SAMPLE_SIZE) -> None:
-        self.csv_path = Path(csv_path)
-        self.sample_size = sample_size
+    def __init__(
+        self,
+        csv_path: Path | str | None = None,
+        sample_size: int | None = None,
+        cache_path: Path | str = CACHE_PATH,
+        meta_path: Path | str = META_PATH,
+        *,
+        force_rebuild: bool = False,
+    ) -> None:
+        self.csv_path = Path(csv_path or os.getenv("MOVIES_DATA_PATH", DEFAULT_DATA_PATH))
+        if sample_size is None:
+            raw_sample_size = os.getenv("WORKING_SAMPLE_SIZE", "10000").strip()
+            sample_size = int(raw_sample_size) if raw_sample_size else 0
+        self.sample_size = max(0, int(sample_size))
+        self.cache_path = Path(cache_path)
+        self.meta_path = Path(meta_path)
+        ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
+
+        if force_rebuild or not self._load_cache_if_current():
+            self._build_and_cache()
+
+    def _dataset_signature(self) -> str:
+        stat = self.csv_path.stat()
+        signature = f"{self.csv_path.resolve()}|{stat.st_size}|{int(stat.st_mtime)}|{self.sample_size}"
+        return hashlib.sha256(signature.encode("utf-8")).hexdigest()
+
+    def _load_cache_if_current(self) -> bool:
+        if not self.cache_path.exists() or not self.meta_path.exists():
+            return False
+        try:
+            metadata = json.loads(self.meta_path.read_text(encoding="utf-8"))
+            if metadata.get("dataset_signature") != self._dataset_signature():
+                return False
+            payload = joblib.load(self.cache_path)
+        except (OSError, ValueError, KeyError):
+            return False
+
+        self.movies = payload["movies"]
+        self.tfidf_matrix = payload["tfidf_matrix"]
+        self.search_choices = payload["search_choices"]
+        self.genre_options = payload["genre_options"]
+        self.language_options = payload["language_options"]
+        return True
+
+    def _build_and_cache(self) -> None:
         self.movies = self._load_working_set()
         self.tfidf_matrix = self._build_tfidf_matrix()
-        self.title_choices = self.movies["normalized_title"].tolist()
         self.search_choices = self.movies["search_title"].tolist()
         self.genre_options = self._build_genre_options()
         self.language_options = self._build_language_options()
+
+        payload = {
+            "movies": self.movies,
+            "tfidf_matrix": self.tfidf_matrix,
+            "search_choices": self.search_choices,
+            "genre_options": self.genre_options,
+            "language_options": self.language_options,
+        }
+        joblib.dump(payload, self.cache_path)
+        self.meta_path.write_text(
+            json.dumps(
+                {
+                    "dataset_signature": self._dataset_signature(),
+                    "data_path": str(self.csv_path),
+                    "sample_size": self.sample_size,
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
 
     def _load_working_set(self) -> pd.DataFrame:
         use_columns = [
@@ -65,7 +133,6 @@ class MovieRecommender:
             "title",
             "vote_average",
             "vote_count",
-            "status",
             "release_date",
             "runtime",
             "backdrop_path",
@@ -83,7 +150,7 @@ class MovieRecommender:
         df = pd.read_csv(
             self.csv_path,
             usecols=use_columns,
-            nrows=self.sample_size,
+            nrows=self.sample_size or None,
             low_memory=False,
         )
 
@@ -113,7 +180,6 @@ class MovieRecommender:
 
         df["genre_list"] = df["genres"].map(self._split_people_text)
         df["keyword_list"] = df["keywords"].map(self._split_people_text)
-        df["spoken_language_list"] = df["spoken_languages"].map(self._split_people_text)
         df["genre_set"] = df["genre_list"].map(set)
         df["primary_language"] = df["original_language"].str.lower().str.strip().replace("", "unknown")
         df["language_label"] = df["primary_language"].map(self._language_label)
@@ -160,7 +226,7 @@ class MovieRecommender:
             stop_words="english",
             ngram_range=(1, 2),
             min_df=2,
-            max_features=14_000,
+            max_features=int(os.getenv("TFIDF_MAX_FEATURES", "14000")),
         )
         self.vectorizer = vectorizer
         return vectorizer.fit_transform(self.movies["content_soup"])
@@ -243,6 +309,7 @@ class MovieRecommender:
             "backdrop_url": row["backdrop_url"],
             "genres": row["genre_display"],
             "language": row["language_label"],
+            "language_code": row["primary_language"],
             "imdb_rating": round(float(row["imdb_rating"]), 1),
             "vote_average": round(float(row["vote_average"]), 1),
             "overview": row["overview"] or "No overview available yet.",
@@ -351,7 +418,12 @@ class MovieRecommender:
         candidate_frame = self._apply_filters(candidate_frame, genre=genre, language=language)
 
         if candidate_frame.empty:
-            fallback_movies = self.get_popular_movies(limit=top_n, genre=genre, language=language, exclude_id=int(seed_movie["id"]))
+            fallback_movies = self.get_popular_movies(
+                limit=top_n,
+                genre=genre,
+                language=language,
+                exclude_id=int(seed_movie["id"]),
+            )
             return RecommendationResult(
                 query=query,
                 resolved_title=seed_movie["title"],
@@ -382,7 +454,12 @@ class MovieRecommender:
         ).head(top_n)
 
         if ranked.empty:
-            ranked_movies = self.get_popular_movies(limit=top_n, genre=genre, language=language, exclude_id=int(seed_movie["id"]))
+            ranked_movies = self.get_popular_movies(
+                limit=top_n,
+                genre=genre,
+                language=language,
+                exclude_id=int(seed_movie["id"]),
+            )
         else:
             ranked_movies = [self._serialize_movie(row) for _, row in ranked.iterrows()]
 
@@ -395,6 +472,31 @@ class MovieRecommender:
             movies=ranked_movies,
         )
 
+    def get_search_suggestions(self, query: str, limit: int = 8) -> list[dict[str, Any]]:
+        normalized_query = query.casefold().strip()
+        if len(normalized_query) < 2:
+            return []
+
+        search_query = re.sub(r"[^a-z0-9\s]", " ", normalized_query)
+        search_query = re.sub(r"\s+", " ", search_query).strip()
+        matches = process.extract(
+            search_query,
+            self.search_choices,
+            scorer=fuzz.WRatio,
+            limit=limit,
+        )
+        suggestions = []
+        for _, _, match_index in matches:
+            row = self.movies.iloc[match_index]
+            suggestions.append(
+                {
+                    "id": int(row["id"]),
+                    "title": row["title"],
+                    "year": int(row["release_year"]) if row["release_year"] else None,
+                }
+            )
+        return suggestions
+
     @staticmethod
     def _jaccard_similarity(left: set[str], right: set[str]) -> float:
         if not left or not right:
@@ -403,3 +505,7 @@ class MovieRecommender:
         if not union:
             return 0.0
         return len(left & right) / len(union)
+
+    @staticmethod
+    def serialize_recommendation_result(result: RecommendationResult) -> dict[str, Any]:
+        return asdict(result)

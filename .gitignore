@@ -1,2 +1,6 @@
-movies1M.csv
+__pycache__/
+artifacts/
+data/
+frontend/.vercel/
+frontend/node_modules/
 movies1M.csv

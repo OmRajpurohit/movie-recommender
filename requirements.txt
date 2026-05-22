@@ -1,4 +1,8 @@
 flask
+flask-cors
+gunicorn
+gdown
+joblib
 pandas==2.1.4
 numpy==1.26.4
 scikit-learn
