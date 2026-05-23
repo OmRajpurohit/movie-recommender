@@ -11,7 +11,14 @@ from recommender import MovieRecommender
 
 app = Flask(__name__)
 
-frontend_origin = os.getenv("FRONTEND_ORIGIN", "*").strip() or "*"
+def parse_frontend_origins(raw_value: str | None) -> list[str] | str:
+    if not raw_value:
+        return "*"
+    origins = [item.strip().rstrip("/") for item in raw_value.split(",") if item.strip()]
+    return origins or "*"
+
+
+frontend_origin = parse_frontend_origins(os.getenv("FRONTEND_ORIGIN"))
 CORS(
     app,
     resources={r"/api/*": {"origins": frontend_origin}},

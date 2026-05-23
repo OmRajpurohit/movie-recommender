@@ -31,6 +31,10 @@ const seedTitle = document.getElementById("seed-title");
 const seedMeta = document.getElementById("seed-meta");
 const seedOverview = document.getElementById("seed-overview");
 
+function sleep(ms) {
+    return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
 function buildUrl(path, params = {}) {
     const url = new URL(`${apiBase}${path}`);
     Object.entries(params).forEach(([key, value]) => {
@@ -41,17 +45,42 @@ function buildUrl(path, params = {}) {
     return url.toString();
 }
 
-async function fetchJson(path, params = {}) {
+function explainFetchError(error) {
+    const message = String(error?.message || error || "");
+    if (message.includes("Failed to fetch")) {
+        return "Could not reach the Render API. Check CINEMA_ATLAS_API_BASE_URL on Vercel, FRONTEND_ORIGIN on Render, and give Render a minute if the free instance is waking up.";
+    }
+    return message || "Request failed.";
+}
+
+async function fetchJson(path, params = {}, options = {}) {
     if (!apiBase) {
         throw new Error("Set CINEMA_ATLAS_API_BASE_URL for Vercel builds or update frontend/config.js for local testing.");
     }
 
-    const response = await fetch(buildUrl(path, params));
-    const payload = await response.json();
-    if (!response.ok) {
-        throw new Error(payload.error || "Request failed.");
+    const retries = options.retries ?? 2;
+    const retryDelayMs = options.retryDelayMs ?? 2500;
+    let lastError;
+
+    for (let attempt = 0; attempt <= retries; attempt += 1) {
+        try {
+            const response = await fetch(buildUrl(path, params));
+            const payload = await response.json();
+            if (!response.ok) {
+                throw new Error(payload.error || "Request failed.");
+            }
+            return payload;
+        } catch (error) {
+            lastError = error;
+            if (attempt < retries) {
+                showMessage(`Waking up the backend and retrying... (${attempt + 1}/${retries + 1})`);
+                await sleep(retryDelayMs);
+                continue;
+            }
+        }
     }
-    return payload;
+
+    throw new Error(explainFetchError(lastError));
 }
 
 function renderHero(movie) {
@@ -238,6 +267,7 @@ searchForm.addEventListener("submit", async (event) => {
 
 async function bootstrap() {
     try {
+        showMessage("Connecting to the recommendation backend...");
         await Promise.all([loadFilters(), loadFeatured()]);
         state.genre = genreSelect.value || "all";
         state.language = languageSelect.value || "all";
