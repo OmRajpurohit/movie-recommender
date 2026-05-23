@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 import os
+import re
 import shutil
+from urllib.parse import parse_qs, urlparse
 
 import gdown
 
@@ -10,6 +12,19 @@ import gdown
 PROJECT_ROOT = Path(__file__).resolve().parent
 DEFAULT_TARGET = PROJECT_ROOT / "data" / "movies1M.csv"
 LOCAL_FALLBACK = PROJECT_ROOT / "movies1M.csv"
+
+
+def extract_google_drive_file_id(url: str) -> str | None:
+    parsed = urlparse(url)
+    query_file_id = parse_qs(parsed.query).get("id")
+    if query_file_id:
+        return query_file_id[0]
+
+    match = re.search(r"/file/d/([^/]+)", parsed.path)
+    if match:
+        return match.group(1)
+
+    return None
 
 
 def main() -> None:
@@ -34,7 +49,13 @@ def main() -> None:
         return
 
     if google_drive_url:
-        gdown.download(url=google_drive_url, output=str(target_path), quiet=False, fuzzy=True)
+        extracted_file_id = extract_google_drive_file_id(google_drive_url)
+        if extracted_file_id:
+            gdown.download(id=extracted_file_id, output=str(target_path), quiet=False)
+            print(f"Downloaded dataset from Google Drive URL via extracted file id to {target_path}")
+            return
+
+        gdown.download(url=google_drive_url, output=str(target_path), quiet=False)
         print(f"Downloaded dataset from Google Drive URL to {target_path}")
         return
 
